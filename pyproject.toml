@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "meta-ads-mcp"
+version = "0.1.0"
+description = "MCP server for creating and managing Meta (Facebook/Instagram) ad campaigns with Claude."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [
+    { name = "Attainment Labs", email = "hello@attainmentlabs.com" },
+]
+keywords = ["meta", "facebook", "instagram", "ads", "mcp", "claude", "ai", "marketing"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "mcp[cli]>=1.0",
+    "requests>=2.28",
+    "python-dotenv>=1.0",
+]
+
+[project.scripts]
+meta-ads-mcp = "meta_ads_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["meta_ads_mcp"]
+
+[project.urls]
+Homepage = "https://github.com/attainmentlabs/meta-ads-mcp"
+Issues = "https://github.com/attainmentlabs/meta-ads-mcp/issues"
