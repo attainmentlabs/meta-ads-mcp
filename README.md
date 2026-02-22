@@ -1,4 +1,4 @@
-# meta-ads-mcp
+# attainment-meta-ads-mcp
 
 MCP server for creating and managing Meta (Facebook/Instagram) ad campaigns directly from Claude. Tell Claude what you want. It deploys.
 
@@ -37,7 +37,7 @@ Add to `~/.mcp.json`:
   "mcpServers": {
     "meta-ads": {
       "command": "uvx",
-      "args": ["meta-ads-mcp @ git+https://github.com/attainmentlabs/meta-ads-mcp"],
+      "args": ["attainment-meta-ads-mcp"],
       "env": {
         "META_ACCESS_TOKEN": "your-token-here",
         "META_AD_ACCOUNT_ID": "your-account-id",
@@ -51,7 +51,7 @@ Add to `~/.mcp.json`:
 ### Option 2: pip install
 
 ```bash
-pip install "meta-ads-mcp @ git+https://github.com/attainmentlabs/meta-ads-mcp"
+pip install attainment-meta-ads-mcp
 ```
 
 Then in `~/.mcp.json`:
@@ -60,7 +60,7 @@ Then in `~/.mcp.json`:
 {
   "mcpServers": {
     "meta-ads": {
-      "command": "meta-ads-mcp",
+      "command": "attainment-meta-ads-mcp",
       "env": {
         "META_ACCESS_TOKEN": "your-token-here",
         "META_AD_ACCOUNT_ID": "your-account-id",
