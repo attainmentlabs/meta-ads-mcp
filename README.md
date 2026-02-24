@@ -85,15 +85,15 @@ Then in `~/.mcp.json`:
 
 ## Credentials
 
-You need three values from your Meta Business Manager:
+You need three values from Meta. Full step-by-step walkthrough: **[SETUP.md](SETUP.md)**
 
 | Variable | Where to find it |
 |----------|-----------------|
-| `META_ACCESS_TOKEN` | Meta for Developers: Graph API Explorer, generate a long-lived token with `ads_management` permission |
-| `META_AD_ACCOUNT_ID` | Meta Business Manager: Settings > Ad Accounts (numbers only, no `act_` prefix) |
-| `META_PAGE_ID` | Facebook Page: Settings > Page Info > Page ID |
+| `META_ACCESS_TOKEN` | Graph API Explorer — long-lived token with `ads_management` permission |
+| `META_AD_ACCOUNT_ID` | Business Manager: Ad Accounts — numbers only, no `act_` prefix |
+| `META_PAGE_ID` | Facebook Page: About → Page transparency → Page ID |
 
-The access token expires. Generate a 60-day long-lived token to reduce rotation frequency.
+The access token expires after 60 days. See [SETUP.md](SETUP.md) for the exchange flow.
 
 ---
 
