@@ -24,7 +24,17 @@ All campaigns are created as **PAUSED** by default. You review before spending.
 
 ## Install
 
-### Option 1: uvx (recommended, no install needed)
+### Option 1: Let Claude set it up for you (easiest)
+
+If you use [Claude Code](https://claude.ai/download), paste this prompt:
+
+> "Set up meta-ads-mcp for me: https://github.com/attainmentlabs/meta-ads-mcp"
+
+Claude will check your environment, walk you through getting your Meta credentials step by step, edit your `~/.mcp.json`, and confirm when it's done. No docs to read.
+
+---
+
+### Option 2: uvx (recommended, no install needed)
 
 ```bash
 # No setup required — uvx runs it directly
