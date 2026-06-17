@@ -3,6 +3,8 @@
 import json
 import os
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
 
 import requests
 from mcp.server.fastmcp import FastMCP
@@ -104,6 +106,7 @@ class MetaAdsAPI:
                       optimization_goal="LINK_CLICKS", billing_event="IMPRESSIONS",
                       bid_strategy="LOWEST_COST_WITHOUT_CAP", status="PAUSED"):
         """Create an ad set with targeting. Returns the ad set ID."""
+        _check_daily_budget_limit(daily_budget, "create_ad_set")
         targeting_spec = {
             "age_min": targeting.get("age_min", 18),
             "age_max": targeting.get("age_max", 65),
@@ -183,6 +186,37 @@ class MetaAdsAPI:
         """Get campaign details."""
         return self._request("GET", campaign_id, params={"fields": fields})
 
+    def get_ad_account(self, fields="id,name,account_status,currency,timezone_name,amount_spent,balance"):
+        """Get configured ad account details."""
+        return self._request("GET", self.act_id, params={"fields": fields})
+
+    def list_campaigns(self, fields="id,name,status,effective_status,objective,created_time,updated_time", limit=25):
+        """List campaigns in the configured ad account."""
+        result = self._request(
+            "GET",
+            f"{self.act_id}/campaigns",
+            params={"fields": fields, "limit": str(limit)},
+        )
+        return result.get("data", [])
+
+    def list_ad_sets(self, fields="id,name,status,effective_status,daily_budget,campaign_id", limit=25):
+        """List ad sets in the configured ad account."""
+        result = self._request(
+            "GET",
+            f"{self.act_id}/adsets",
+            params={"fields": fields, "limit": str(limit)},
+        )
+        return result.get("data", [])
+
+    def list_ads(self, fields="id,name,status,effective_status,adset_id,campaign_id", limit=25):
+        """List ads in the configured ad account."""
+        result = self._request(
+            "GET",
+            f"{self.act_id}/ads",
+            params={"fields": fields, "limit": str(limit)},
+        )
+        return result.get("data", [])
+
     def get_ad_sets(self, campaign_id, fields="name,status,daily_budget"):
         """Get ad sets for a campaign."""
         result = self._request("GET", f"{campaign_id}/adsets", params={"fields": fields})
@@ -193,9 +227,37 @@ class MetaAdsAPI:
         result = self._request("GET", f"{campaign_id}/ads", params={"fields": fields})
         return result.get("data", [])
 
+    def get_insights(
+        self,
+        object_id,
+        fields="impressions,clicks,spend,cpc,cpm,ctr,actions",
+        level=None,
+        date_preset="last_7d",
+        limit=25,
+    ):
+        """Get insights for an account, campaign, ad set, or ad."""
+        params = {
+            "fields": fields,
+            "date_preset": date_preset,
+            "limit": str(limit),
+        }
+        if level:
+            params["level"] = level
+        result = self._request("GET", f"{object_id}/insights", params=params)
+        return result.get("data", [])
+
     def update_status(self, object_id, status):
         """Update the status of a campaign, ad set, or ad."""
         return self._request("POST", object_id, params={"status": status})
+
+    def update_daily_budget(self, object_id, daily_budget_cents):
+        """Update daily budget for a campaign or ad set."""
+        _check_daily_budget_limit(daily_budget_cents, "update_daily_budget")
+        return self._request(
+            "POST",
+            object_id,
+            params={"daily_budget": str(daily_budget_cents)},
+        )
 
     def delete_campaign(self, campaign_id):
         """Delete a campaign (sets status to DELETED)."""
@@ -216,6 +278,59 @@ def _get_api(dry_run: bool = False) -> MetaAdsAPI:
     )
 
 
+def _audit_log_path() -> Path:
+    configured = os.environ.get("META_ADS_AUDIT_LOG_PATH")
+    if configured:
+        return Path(configured).expanduser()
+    return Path.home() / ".meta-ads-mcp" / "audit.jsonl"
+
+
+def _write_audit(action: str, request: dict, result: dict) -> None:
+    """Write a local audit event without credentials or secrets."""
+    path = _audit_log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    event = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "action": action,
+        "ad_account_id": os.environ.get("META_AD_ACCOUNT_ID"),
+        "request": request,
+        "result": result,
+    }
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(event, sort_keys=True) + "\n")
+
+
+def _require_confirmation(confirm: bool, action: str) -> None:
+    if not confirm:
+        raise ValueError(
+            f"{action} changes a live Meta ad account. Re-run with confirm=True after reviewing the plan."
+        )
+
+
+def _check_daily_budget_limit(daily_budget_cents: int, action: str) -> None:
+    if daily_budget_cents <= 0:
+        raise ValueError(f"{action} daily_budget_cents must be positive.")
+    raw_limit = os.environ.get("META_ADS_MAX_DAILY_BUDGET_CENTS")
+    if not raw_limit:
+        return
+    try:
+        limit = int(raw_limit)
+    except ValueError as exc:
+        raise ValueError("META_ADS_MAX_DAILY_BUDGET_CENTS must be an integer.") from exc
+    if daily_budget_cents > limit:
+        raise ValueError(
+            f"{action} budget {daily_budget_cents} exceeds META_ADS_MAX_DAILY_BUDGET_CENTS={limit}."
+        )
+
+
+def _bounded_limit(limit: int) -> int:
+    if limit < 1:
+        return 1
+    if limit > 100:
+        return 100
+    return limit
+
+
 # ---------------------------------------------------------------------------
 # MCP Tools
 # ---------------------------------------------------------------------------
@@ -232,6 +347,7 @@ def create_meta_campaign(
     optimization_goal: str = "LINK_CLICKS",
     ads: list = [],
     dry_run: bool = True,
+    confirm: bool = False,
 ) -> dict:
     """Create a complete Meta ad campaign: campaign, ad set, creatives, and ads.
 
@@ -248,6 +364,7 @@ def create_meta_campaign(
 
     dry_run: when True (default), simulates all API calls without spending money.
     Set dry_run=False to actually deploy. All campaigns start as PAUSED regardless.
+    confirm: required when dry_run=False. This is the approval gate.
 
     Valid objectives: OUTCOME_TRAFFIC, OUTCOME_AWARENESS, OUTCOME_ENGAGEMENT,
     OUTCOME_LEADS, OUTCOME_SALES, OUTCOME_APP_PROMOTION
@@ -255,6 +372,8 @@ def create_meta_campaign(
     Valid CTAs: LEARN_MORE, SIGN_UP, DOWNLOAD, SHOP_NOW, BOOK_NOW, GET_OFFER,
     SUBSCRIBE, CONTACT_US, APPLY_NOW, WATCH_MORE, INSTALL_MOBILE_APP
     """
+    if not dry_run:
+        _require_confirmation(confirm, "create_meta_campaign")
     api = _get_api(dry_run=dry_run)
 
     targeting = {
@@ -265,6 +384,7 @@ def create_meta_campaign(
 
     result = {
         "dry_run": dry_run,
+        "confirmed": confirm,
         "campaign_id": None,
         "ad_set_id": None,
         "creatives": [],
@@ -316,6 +436,205 @@ def create_meta_campaign(
         )
         result["ads"].append(ad_id)
 
+    _write_audit(
+        "create_meta_campaign",
+        {
+            "campaign_name": campaign_name,
+            "ad_set_name": ad_set_name,
+            "objective": objective,
+            "countries": countries,
+            "age_min": age_min,
+            "age_max": age_max,
+            "daily_budget_cents": daily_budget_cents,
+            "optimization_goal": optimization_goal,
+            "ad_count": len(ads),
+            "dry_run": dry_run,
+            "confirmed": confirm,
+        },
+        result,
+    )
+    return result
+
+
+@mcp.tool()
+def get_ad_account_summary() -> dict:
+    """Get the configured Meta ad account summary.
+
+    Read-only. Use this before campaign work to confirm the connected account,
+    currency, timezone, spend, balance, and account status.
+    """
+    api = _get_api()
+    account = api.get_ad_account()
+    return {
+        "id": account.get("id"),
+        "name": account.get("name"),
+        "account_status": account.get("account_status"),
+        "currency": account.get("currency"),
+        "timezone_name": account.get("timezone_name"),
+        "amount_spent": account.get("amount_spent"),
+        "balance": account.get("balance"),
+    }
+
+
+@mcp.tool()
+def list_campaigns(limit: int = 25) -> dict:
+    """List recent campaigns in the configured Meta ad account.
+
+    Read-only. Use this to find campaign IDs before status, insights, budget,
+    pause, activate, or bulk operations.
+    """
+    api = _get_api()
+    campaigns = api.list_campaigns(limit=_bounded_limit(limit))
+    return {"campaigns": campaigns, "count": len(campaigns)}
+
+
+@mcp.tool()
+def list_ad_sets(limit: int = 25) -> dict:
+    """List recent ad sets in the configured Meta ad account.
+
+    Read-only. Use this to find ad set IDs before budget or status changes.
+    """
+    api = _get_api()
+    ad_sets = api.list_ad_sets(limit=_bounded_limit(limit))
+    return {"ad_sets": ad_sets, "count": len(ad_sets)}
+
+
+@mcp.tool()
+def list_ads(limit: int = 25) -> dict:
+    """List recent ads in the configured Meta ad account.
+
+    Read-only. Use this to find ad IDs and inspect delivery status.
+    """
+    api = _get_api()
+    ads = api.list_ads(limit=_bounded_limit(limit))
+    return {"ads": ads, "count": len(ads)}
+
+
+@mcp.tool()
+def get_meta_insights(
+    object_id: str = "",
+    level: str = "",
+    date_preset: str = "last_7d",
+    limit: int = 25,
+) -> dict:
+    """Get Meta Ads performance insights.
+
+    Read-only. object_id can be an ad account, campaign, ad set, or ad ID.
+    Leave object_id blank to use the configured ad account. Use level for
+    account breakdowns such as campaign, adset, or ad.
+    """
+    api = _get_api()
+    target = object_id or api.act_id
+    insights = api.get_insights(
+        object_id=target,
+        level=level or None,
+        date_preset=date_preset,
+        limit=_bounded_limit(limit),
+    )
+    return {
+        "object_id": target,
+        "level": level or None,
+        "date_preset": date_preset,
+        "insights": insights,
+        "count": len(insights),
+    }
+
+
+@mcp.tool()
+def upload_ad_image(image_path: str, dry_run: bool = True, confirm: bool = False) -> dict:
+    """Upload an image to the configured Meta ad account.
+
+    dry_run defaults to True. Set dry_run=False and confirm=True to upload.
+    Returns an image hash that can be used in ad creatives.
+    """
+    if not dry_run:
+        _require_confirmation(confirm, "upload_ad_image")
+    api = _get_api(dry_run=dry_run)
+    image_hash = api.upload_image(image_path)
+    result = {"dry_run": dry_run, "confirmed": confirm, "image_hash": image_hash}
+    _write_audit(
+        "upload_ad_image",
+        {"image_path": image_path, "dry_run": dry_run, "confirmed": confirm},
+        result,
+    )
+    return result
+
+
+@mcp.tool()
+def update_daily_budget(
+    object_id: str,
+    daily_budget_cents: int,
+    dry_run: bool = True,
+    confirm: bool = False,
+) -> dict:
+    """Update daily budget for a campaign or ad set.
+
+    dry_run defaults to True. Set dry_run=False and confirm=True after review.
+    If META_ADS_MAX_DAILY_BUDGET_CENTS is set, the budget cannot exceed it.
+    """
+    if not dry_run:
+        _require_confirmation(confirm, "update_daily_budget")
+    api = _get_api(dry_run=dry_run)
+    api.update_daily_budget(object_id, daily_budget_cents)
+    result = {
+        "success": True,
+        "object_id": object_id,
+        "daily_budget_cents": daily_budget_cents,
+        "dry_run": dry_run,
+        "confirmed": confirm,
+    }
+    _write_audit(
+        "update_daily_budget",
+        {
+            "object_id": object_id,
+            "daily_budget_cents": daily_budget_cents,
+            "dry_run": dry_run,
+            "confirmed": confirm,
+        },
+        result,
+    )
+    return result
+
+
+@mcp.tool()
+def bulk_update_campaign_status(
+    campaign_ids: list,
+    status: str,
+    dry_run: bool = True,
+    confirm: bool = False,
+) -> dict:
+    """Bulk pause, activate, or delete campaigns.
+
+    status must be PAUSED, ACTIVE, or DELETED. dry_run defaults to True.
+    Set dry_run=False and confirm=True after reviewing the campaign IDs.
+    """
+    status = status.upper()
+    if status not in {"PAUSED", "ACTIVE", "DELETED"}:
+        raise ValueError("status must be PAUSED, ACTIVE, or DELETED.")
+    if not dry_run:
+        _require_confirmation(confirm, "bulk_update_campaign_status")
+    api = _get_api(dry_run=dry_run)
+    changed = []
+    for campaign_id in campaign_ids:
+        api.update_status(campaign_id, status)
+        changed.append({"campaign_id": campaign_id, "status": status})
+    result = {
+        "success": True,
+        "dry_run": dry_run,
+        "confirmed": confirm,
+        "changed": changed,
+        "count": len(changed),
+    }
+    _write_audit(
+        "bulk_update_campaign_status",
+        {
+            "campaign_ids": campaign_ids,
+            "status": status,
+            "dry_run": dry_run,
+            "confirmed": confirm,
+        },
+        result,
+    )
     return result
 
 
@@ -364,26 +683,38 @@ def pause_campaign(campaign_id: str) -> dict:
     """Pause a live Meta campaign. Safe to call on already-paused campaigns."""
     api = _get_api()
     api.update_status(campaign_id, "PAUSED")
-    return {"success": True, "campaign_id": campaign_id, "status": "PAUSED"}
+    result = {"success": True, "campaign_id": campaign_id, "status": "PAUSED"}
+    _write_audit("pause_campaign", {"campaign_id": campaign_id}, result)
+    return result
 
 
 @mcp.tool()
-def activate_campaign(campaign_id: str) -> dict:
+def activate_campaign(campaign_id: str, confirm: bool = False) -> dict:
     """Activate (unpause) a Meta campaign. This will resume ad spending.
 
     The campaign must have a valid payment method and approved creatives.
+    Set confirm=True after reviewing the campaign in Ads Manager.
     """
+    _require_confirmation(confirm, "activate_campaign")
     api = _get_api()
     api.update_status(campaign_id, "ACTIVE")
-    return {"success": True, "campaign_id": campaign_id, "status": "ACTIVE"}
+    result = {"success": True, "campaign_id": campaign_id, "status": "ACTIVE", "confirmed": confirm}
+    _write_audit("activate_campaign", {"campaign_id": campaign_id, "confirmed": confirm}, result)
+    return result
 
 
 @mcp.tool()
-def delete_campaign(campaign_id: str) -> dict:
-    """Permanently delete a Meta campaign. This cannot be undone."""
+def delete_campaign(campaign_id: str, confirm: bool = False) -> dict:
+    """Permanently delete a Meta campaign. This cannot be undone.
+
+    Set confirm=True after reviewing the campaign ID.
+    """
+    _require_confirmation(confirm, "delete_campaign")
     api = _get_api()
     api.delete_campaign(campaign_id)
-    return {"success": True, "campaign_id": campaign_id, "status": "DELETED"}
+    result = {"success": True, "campaign_id": campaign_id, "status": "DELETED", "confirmed": confirm}
+    _write_audit("delete_campaign", {"campaign_id": campaign_id, "confirmed": confirm}, result)
+    return result
 
 
 # ---------------------------------------------------------------------------

@@ -138,7 +138,7 @@ If `~/.mcp.json` already has other servers, add the `"meta-ads"` block inside th
 
 ## Step 8: Restart Claude
 
-Close and reopen Claude Code. Run `/mcp` to confirm the `meta-ads` server appears with 5 tools.
+Close and reopen Claude Code. Run `/mcp` to confirm the `meta-ads` server appears with its campaign, reporting, budget, bulk operation, and safety tools.
 
 ---
 
