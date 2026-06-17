@@ -22,17 +22,32 @@ Related:
 
 ## What it does
 
-Add this server to your Claude config. You get 5 tools:
+Add this server to your Claude config. You get campaign creation, reporting, bulk operations, budget control, and safety tools:
 
 | Tool | What it does |
 |------|-------------|
 | `create_meta_campaign` | Create a full campaign: campaign, ad set, creatives, and ads |
+| `get_ad_account_summary` | Confirm connected ad account, currency, timezone, spend, balance, and status |
+| `list_campaigns` | List recent campaigns in the configured ad account |
+| `list_ad_sets` | List recent ad sets in the configured ad account |
+| `list_ads` | List recent ads in the configured ad account |
 | `get_campaign_status` | Check status of a campaign, its ad sets, and ads |
+| `get_meta_insights` | Pull account, campaign, ad set, or ad performance insights |
+| `upload_ad_image` | Upload an image and return the image hash for creatives |
+| `update_daily_budget` | Update campaign or ad set daily budget |
+| `bulk_update_campaign_status` | Bulk pause, activate, or delete campaigns |
 | `pause_campaign` | Pause a live campaign |
 | `activate_campaign` | Activate a paused campaign |
 | `delete_campaign` | Permanently delete a campaign |
 
 All campaigns are created as **PAUSED** by default. You review before spending.
+
+Safety controls:
+
+- `dry_run=True` by default on campaign creation, media upload, budget updates, and bulk status changes.
+- `confirm=True` is required for live campaign creation, uploads, budget updates, activation, deletion, and bulk status changes.
+- `META_ADS_MAX_DAILY_BUDGET_CENTS` can cap campaign and ad set daily budgets.
+- `META_ADS_AUDIT_LOG_PATH` can set a JSONL audit log path. Default is `~/.meta-ads-mcp/audit.jsonl`.
 
 ---
 
@@ -65,7 +80,8 @@ Add to `~/.mcp.json`:
       "env": {
         "META_ACCESS_TOKEN": "your-token-here",
         "META_AD_ACCOUNT_ID": "your-account-id",
-        "META_PAGE_ID": "your-page-id"
+        "META_PAGE_ID": "your-page-id",
+        "META_ADS_MAX_DAILY_BUDGET_CENTS": "5000"
       }
     }
   }
@@ -88,7 +104,8 @@ Then in `~/.mcp.json`:
       "env": {
         "META_ACCESS_TOKEN": "your-token-here",
         "META_AD_ACCOUNT_ID": "your-account-id",
-        "META_PAGE_ID": "your-page-id"
+        "META_PAGE_ID": "your-page-id",
+        "META_ADS_MAX_DAILY_BUDGET_CENTS": "5000"
       }
     }
   }
@@ -106,6 +123,8 @@ You need three values from Meta. Full step-by-step walkthrough: **[SETUP.md](SET
 | `META_ACCESS_TOKEN` | Graph API Explorer. Long-lived token with `ads_management` permission |
 | `META_AD_ACCOUNT_ID` | Business Manager: Ad Accounts. Numbers only, no `act_` prefix |
 | `META_PAGE_ID` | Facebook Page: About → Page transparency → Page ID |
+| `META_ADS_MAX_DAILY_BUDGET_CENTS` | Optional daily budget guardrail |
+| `META_ADS_AUDIT_LOG_PATH` | Optional JSONL audit log path |
 
 The access token expires after 60 days. See [SETUP.md](SETUP.md) for the exchange flow.
 
@@ -121,6 +140,18 @@ Once the server is connected, just describe what you want:
 **Check status:**
 > "What's the status of campaign 120243616427570285?"
 
+**List campaigns:**
+> "List my recent Meta campaigns."
+
+**Pull insights:**
+> "Show Meta ad account insights for the last 7 days by campaign."
+
+**Update budget safely:**
+> "Dry run a budget update to set ad set 120243616427570285 to $30 per day."
+
+**Bulk pause:**
+> "Dry run pausing these three campaigns: 111, 222, 333."
+
 **Pause:**
 > "Pause campaign 120243616427570285."
 
@@ -134,7 +165,11 @@ Once the server is connected, just describe what you want:
 
 ## dry_run mode
 
-`create_meta_campaign` defaults to `dry_run=True`. This simulates all API calls and returns fake IDs without making any requests or spending money. Set `dry_run=False` when you're ready to deploy.
+`create_meta_campaign`, `upload_ad_image`, `update_daily_budget`, and `bulk_update_campaign_status` default to `dry_run=True`. This simulates API calls and returns fake IDs or planned changes without making requests or spending money.
+
+For live changes, set `dry_run=False` and `confirm=True`.
+
+`activate_campaign` and `delete_campaign` also require `confirm=True`.
 
 ---
 
@@ -146,7 +181,7 @@ Prefer writing campaigns as config files? Use [meta-ads-cli](https://github.com/
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.10+
 - `uv` for the uvx install path
 - A Meta Business Manager account with an ad account and Facebook Page
 
