@@ -6,6 +6,20 @@ Built by [Attainment Labs](https://www.attainmentlabs.com).
 
 ---
 
+## Status in the Meta Ads ecosystem
+
+This is an early independent open source Meta Ads MCP server, first published in February 2026 before Meta later introduced its official Ads AI Connectors and hosted Ads MCP endpoint.
+
+Use Meta's official connector if you want Meta-hosted OAuth and first-party support. Use this project if you want a lightweight, self-managed MCP server that you can inspect, fork, and run with your own Meta app credentials.
+
+Related:
+
+- [Meta's official Ads CLI documentation](https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-cli/ads-cli-overview)
+- [Attainment's companion CLI](https://github.com/attainmentlabs/meta-ads-cli)
+- [Meta Ads Automation Playbook](https://attainmentlabs.com/meta-ads-playbook)
+
+---
+
 ## What it does
 
 Add this server to your Claude config. You get 5 tools:
@@ -37,7 +51,7 @@ Claude will check your environment, walk you through getting your Meta credentia
 ### Option 2: uvx (recommended, no install needed)
 
 ```bash
-# No setup required — uvx runs it directly
+# No setup required. uvx runs it directly
 ```
 
 Add to `~/.mcp.json`:
@@ -89,8 +103,8 @@ You need three values from Meta. Full step-by-step walkthrough: **[SETUP.md](SET
 
 | Variable | Where to find it |
 |----------|-----------------|
-| `META_ACCESS_TOKEN` | Graph API Explorer — long-lived token with `ads_management` permission |
-| `META_AD_ACCOUNT_ID` | Business Manager: Ad Accounts — numbers only, no `act_` prefix |
+| `META_ACCESS_TOKEN` | Graph API Explorer. Long-lived token with `ads_management` permission |
+| `META_AD_ACCOUNT_ID` | Business Manager: Ad Accounts. Numbers only, no `act_` prefix |
 | `META_PAGE_ID` | Facebook Page: About → Page transparency → Page ID |
 
 The access token expires after 60 days. See [SETUP.md](SETUP.md) for the exchange flow.
@@ -126,7 +140,7 @@ Once the server is connected, just describe what you want:
 
 ## YAML workflow
 
-Prefer writing campaigns as config files? Use [meta-ads-cli](https://github.com/attainmentlabs/meta-ads-cli) — the companion CLI tool.
+Prefer writing campaigns as config files? Use [meta-ads-cli](https://github.com/attainmentlabs/meta-ads-cli), the companion CLI tool.
 
 ---
 
