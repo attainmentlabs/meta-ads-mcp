@@ -25,7 +25,7 @@ If you don't have Business Manager: go to **business.facebook.com**, click "Crea
 2. Click **My Apps** (top right) → **Create App**
 3. When asked "What do you want your app to do?", select **Other** → click **Next**
 4. For app type, select **Business** → click **Next**
-5. Give it a name (e.g. "Meta Ads MCP") — this is just for your reference
+5. Give it a name (e.g. "Meta Ads MCP"). This is just for your reference
 6. Under "Business portfolio", select your Business Manager account
 7. Click **Create App**
 
@@ -39,7 +39,7 @@ You'll land on the App Dashboard.
 2. Find **Marketing API** and click **Set Up**
 3. You'll see a "Marketing API" section appear in the left sidebar
 
-That's all — no further configuration needed here.
+That's all. No further configuration needed here.
 
 ---
 
@@ -54,7 +54,7 @@ That's all — no further configuration needed here.
    - `pages_read_engagement`
    - `pages_show_list`
 5. Click **Generate Access Token** → click through the Facebook login/authorization dialogs
-6. Copy the token that appears in the "Access Token" field — this is your short-lived token (valid ~1 hour)
+6. Copy the token that appears in the "Access Token" field. This is your short-lived token (valid ~1 hour)
 
 ---
 
@@ -74,7 +74,7 @@ GET /oauth/access_token?grant_type=fb_exchange_token&client_id={YOUR_APP_ID}&cli
 
 Replace `{YOUR_APP_ID}`, `{YOUR_APP_SECRET}`, and `{YOUR_SHORT_LIVED_TOKEN}` with the real values.
 
-3. The response will contain an `access_token` field — this is your **long-lived token**. Copy it.
+3. The response will contain an `access_token` field. This is your **long-lived token**. Copy it.
 
 This is your `META_ACCESS_TOKEN`. It lasts 60 days. After that, repeat Steps 3-4 to get a new one.
 
@@ -85,7 +85,7 @@ This is your `META_ACCESS_TOKEN`. It lasts 60 days. After that, repeat Steps 3-4
 1. Go to **business.facebook.com**
 2. Click the grid icon (top left) → **Ad Accounts**
 3. You'll see your ad account(s) listed with IDs like `act_123456789`
-4. Copy the numbers only — **no `act_` prefix**
+4. Copy the numbers only. **No `act_` prefix**
 
 Example: if you see `act_123456789`, your `META_AD_ACCOUNT_ID` is `123456789`.
 
@@ -95,7 +95,7 @@ Example: if you see `act_123456789`, your `META_AD_ACCOUNT_ID` is `123456789`.
 
 1. Go to your Facebook Page
 2. Click **About** in the left sidebar
-3. Scroll down to **Page transparency** — your Page ID is listed there
+3. Scroll down to **Page transparency**. Your Page ID is listed there
 
 Alternatively:
 - Go to the page, click the three dots (**...**) → **About** → scroll to find the numeric Page ID
