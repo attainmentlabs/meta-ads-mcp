@@ -285,10 +285,19 @@ def _audit_log_path() -> Path:
     return Path.home() / ".meta-ads-mcp" / "audit.jsonl"
 
 
-def _write_audit(action: str, request: dict, result: dict) -> None:
+def _check_audit_log_writable() -> None:
+    path = _audit_log_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8"):
+            pass
+    except OSError as exc:
+        raise ValueError(f"Audit log is not writable at {path}: {exc}") from exc
+
+
+def _write_audit(action: str, request: dict, result: dict) -> str | None:
     """Write a local audit event without credentials or secrets."""
     path = _audit_log_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
     event = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "action": action,
@@ -296,8 +305,19 @@ def _write_audit(action: str, request: dict, result: dict) -> None:
         "request": request,
         "result": result,
     }
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(event, sort_keys=True) + "\n")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(event, sort_keys=True) + "\n")
+    except OSError as exc:
+        return f"Audit log write failed at {path}: {exc}"
+    return None
+
+
+def _add_audit_warning(result: dict, warning: str | None) -> dict:
+    if warning:
+        result["audit_warning"] = warning
+    return result
 
 
 def _require_confirmation(confirm: bool, action: str) -> None:
@@ -374,6 +394,7 @@ def create_meta_campaign(
     """
     if not dry_run:
         _require_confirmation(confirm, "create_meta_campaign")
+        _check_audit_log_writable()
     api = _get_api(dry_run=dry_run)
 
     targeting = {
@@ -454,11 +475,10 @@ def create_meta_campaign(
             "error": str(exc),
             "error_type": type(exc).__name__,
         }
-        _write_audit("create_meta_campaign", audit_request, failure)
+        _add_audit_warning(failure, _write_audit("create_meta_campaign", audit_request, failure))
         raise
 
-    _write_audit("create_meta_campaign", audit_request, result)
-    return result
+    return _add_audit_warning(result, _write_audit("create_meta_campaign", audit_request, result))
 
 
 @mcp.tool()
@@ -554,15 +574,18 @@ def upload_ad_image(image_path: str, dry_run: bool = True, confirm: bool = False
     """
     if not dry_run:
         _require_confirmation(confirm, "upload_ad_image")
+        _check_audit_log_writable()
     api = _get_api(dry_run=dry_run)
     image_hash = api.upload_image(image_path)
     result = {"dry_run": dry_run, "confirmed": confirm, "image_hash": image_hash}
-    _write_audit(
-        "upload_ad_image",
-        {"image_path": image_path, "dry_run": dry_run, "confirmed": confirm},
+    return _add_audit_warning(
         result,
+        _write_audit(
+            "upload_ad_image",
+            {"image_path": image_path, "dry_run": dry_run, "confirmed": confirm},
+            result,
+        ),
     )
-    return result
 
 
 @mcp.tool()
@@ -579,6 +602,7 @@ def update_daily_budget(
     """
     if not dry_run:
         _require_confirmation(confirm, "update_daily_budget")
+        _check_audit_log_writable()
     api = _get_api(dry_run=dry_run)
     api.update_daily_budget(object_id, daily_budget_cents)
     result = {
@@ -588,17 +612,19 @@ def update_daily_budget(
         "dry_run": dry_run,
         "confirmed": confirm,
     }
-    _write_audit(
-        "update_daily_budget",
-        {
-            "object_id": object_id,
-            "daily_budget_cents": daily_budget_cents,
-            "dry_run": dry_run,
-            "confirmed": confirm,
-        },
+    return _add_audit_warning(
         result,
+        _write_audit(
+            "update_daily_budget",
+            {
+                "object_id": object_id,
+                "daily_budget_cents": daily_budget_cents,
+                "dry_run": dry_run,
+                "confirmed": confirm,
+            },
+            result,
+        ),
     )
-    return result
 
 
 @mcp.tool()
@@ -618,6 +644,7 @@ def bulk_update_campaign_status(
         raise ValueError("status must be PAUSED, ACTIVE, or DELETED.")
     if not dry_run:
         _require_confirmation(confirm, "bulk_update_campaign_status")
+        _check_audit_log_writable()
     api = _get_api(dry_run=dry_run)
     changed = []
     current_campaign_id = None
@@ -636,15 +663,18 @@ def bulk_update_campaign_status(
             "error": str(exc),
             "error_type": type(exc).__name__,
         }
-        _write_audit(
-            "bulk_update_campaign_status",
-            {
-                "campaign_ids": campaign_ids,
-                "status": status,
-                "dry_run": dry_run,
-                "confirmed": confirm,
-            },
+        _add_audit_warning(
             failure,
+            _write_audit(
+                "bulk_update_campaign_status",
+                {
+                    "campaign_ids": campaign_ids,
+                    "status": status,
+                    "dry_run": dry_run,
+                    "confirmed": confirm,
+                },
+                failure,
+            ),
         )
         raise
     result = {
@@ -654,17 +684,19 @@ def bulk_update_campaign_status(
         "changed": changed,
         "count": len(changed),
     }
-    _write_audit(
-        "bulk_update_campaign_status",
-        {
-            "campaign_ids": campaign_ids,
-            "status": status,
-            "dry_run": dry_run,
-            "confirmed": confirm,
-        },
+    return _add_audit_warning(
         result,
+        _write_audit(
+            "bulk_update_campaign_status",
+            {
+                "campaign_ids": campaign_ids,
+                "status": status,
+                "dry_run": dry_run,
+                "confirmed": confirm,
+            },
+            result,
+        ),
     )
-    return result
 
 
 @mcp.tool()
@@ -710,11 +742,11 @@ def get_campaign_status(campaign_id: str) -> dict:
 @mcp.tool()
 def pause_campaign(campaign_id: str) -> dict:
     """Pause a live Meta campaign. Safe to call on already-paused campaigns."""
+    _check_audit_log_writable()
     api = _get_api()
     api.update_status(campaign_id, "PAUSED")
     result = {"success": True, "campaign_id": campaign_id, "status": "PAUSED"}
-    _write_audit("pause_campaign", {"campaign_id": campaign_id}, result)
-    return result
+    return _add_audit_warning(result, _write_audit("pause_campaign", {"campaign_id": campaign_id}, result))
 
 
 @mcp.tool()
@@ -725,11 +757,14 @@ def activate_campaign(campaign_id: str, confirm: bool = False) -> dict:
     Set confirm=True after reviewing the campaign in Ads Manager.
     """
     _require_confirmation(confirm, "activate_campaign")
+    _check_audit_log_writable()
     api = _get_api()
     api.update_status(campaign_id, "ACTIVE")
     result = {"success": True, "campaign_id": campaign_id, "status": "ACTIVE", "confirmed": confirm}
-    _write_audit("activate_campaign", {"campaign_id": campaign_id, "confirmed": confirm}, result)
-    return result
+    return _add_audit_warning(
+        result,
+        _write_audit("activate_campaign", {"campaign_id": campaign_id, "confirmed": confirm}, result),
+    )
 
 
 @mcp.tool()
@@ -739,11 +774,14 @@ def delete_campaign(campaign_id: str, confirm: bool = False) -> dict:
     Set confirm=True after reviewing the campaign ID.
     """
     _require_confirmation(confirm, "delete_campaign")
+    _check_audit_log_writable()
     api = _get_api()
     api.delete_campaign(campaign_id)
     result = {"success": True, "campaign_id": campaign_id, "status": "DELETED", "confirmed": confirm}
-    _write_audit("delete_campaign", {"campaign_id": campaign_id, "confirmed": confirm}, result)
-    return result
+    return _add_audit_warning(
+        result,
+        _write_audit("delete_campaign", {"campaign_id": campaign_id, "confirmed": confirm}, result),
+    )
 
 
 # ---------------------------------------------------------------------------
