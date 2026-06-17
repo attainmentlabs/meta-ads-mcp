@@ -390,69 +390,74 @@ def create_meta_campaign(
         "creatives": [],
         "ads": [],
     }
+    audit_request = {
+        "campaign_name": campaign_name,
+        "ad_set_name": ad_set_name,
+        "objective": objective,
+        "countries": countries,
+        "age_min": age_min,
+        "age_max": age_max,
+        "daily_budget_cents": daily_budget_cents,
+        "optimization_goal": optimization_goal,
+        "ad_count": len(ads),
+        "dry_run": dry_run,
+        "confirmed": confirm,
+    }
 
-    # Upload images
-    image_hashes = {}
-    for ad in ads:
-        image_hashes[ad["name"]] = api.upload_image(ad["image_path"])
+    try:
+        image_hashes = {}
+        for ad in ads:
+            image_hashes[ad["name"]] = api.upload_image(ad["image_path"])
 
-    # Create campaign
-    campaign_id = api.create_campaign(
-        name=campaign_name,
-        objective=objective,
-        status="PAUSED",
-    )
-    result["campaign_id"] = campaign_id
-
-    # Create ad set
-    ad_set_id = api.create_ad_set(
-        name=ad_set_name,
-        campaign_id=campaign_id,
-        daily_budget=daily_budget_cents,
-        targeting=targeting,
-        optimization_goal=optimization_goal,
-        status="PAUSED",
-    )
-    result["ad_set_id"] = ad_set_id
-
-    # Create creatives and ads
-    for ad in ads:
-        creative_id = api.create_ad_creative(
-            name=f"{ad['name']} - Creative",
-            image_hash=image_hashes[ad["name"]],
-            primary_text=ad["primary_text"].strip(),
-            headline=ad.get("headline", ""),
-            description=ad.get("description", ""),
-            link=ad["link"],
-            cta=ad.get("cta", "LEARN_MORE"),
-        )
-        result["creatives"].append(creative_id)
-
-        ad_id = api.create_ad(
-            name=ad["name"],
-            ad_set_id=ad_set_id,
-            creative_id=creative_id,
+        campaign_id = api.create_campaign(
+            name=campaign_name,
+            objective=objective,
             status="PAUSED",
         )
-        result["ads"].append(ad_id)
+        result["campaign_id"] = campaign_id
 
-    _write_audit(
-        "create_meta_campaign",
-        {
-            "campaign_name": campaign_name,
-            "ad_set_name": ad_set_name,
-            "objective": objective,
-            "countries": countries,
-            "age_min": age_min,
-            "age_max": age_max,
-            "daily_budget_cents": daily_budget_cents,
-            "optimization_goal": optimization_goal,
-            "ad_count": len(ads),
+        ad_set_id = api.create_ad_set(
+            name=ad_set_name,
+            campaign_id=campaign_id,
+            daily_budget=daily_budget_cents,
+            targeting=targeting,
+            optimization_goal=optimization_goal,
+            status="PAUSED",
+        )
+        result["ad_set_id"] = ad_set_id
+
+        for ad in ads:
+            creative_id = api.create_ad_creative(
+                name=f"{ad['name']} - Creative",
+                image_hash=image_hashes[ad["name"]],
+                primary_text=ad["primary_text"].strip(),
+                headline=ad.get("headline", ""),
+                description=ad.get("description", ""),
+                link=ad["link"],
+                cta=ad.get("cta", "LEARN_MORE"),
+            )
+            result["creatives"].append(creative_id)
+
+            ad_id = api.create_ad(
+                name=ad["name"],
+                ad_set_id=ad_set_id,
+                creative_id=creative_id,
+                status="PAUSED",
+            )
+            result["ads"].append(ad_id)
+    except Exception as exc:
+        failure = {
+            "success": False,
             "dry_run": dry_run,
             "confirmed": confirm,
-        },
-        result,
-    )
+            "partial_result": result,
+            "error": str(exc),
+            "error_type": type(exc).__name__,
+        }
+        _write_audit("create_meta_campaign", audit_request, failure)
+        raise
+
+    _write_audit("create_meta_campaign", audit_request, result)
     return result
 
 
@@ -615,9 +620,33 @@ def bulk_update_campaign_status(
         _require_confirmation(confirm, "bulk_update_campaign_status")
     api = _get_api(dry_run=dry_run)
     changed = []
-    for campaign_id in campaign_ids:
-        api.update_status(campaign_id, status)
-        changed.append({"campaign_id": campaign_id, "status": status})
+    current_campaign_id = None
+    try:
+        for campaign_id in campaign_ids:
+            current_campaign_id = campaign_id
+            api.update_status(campaign_id, status)
+            changed.append({"campaign_id": campaign_id, "status": status})
+    except Exception as exc:
+        failure = {
+            "success": False,
+            "dry_run": dry_run,
+            "confirmed": confirm,
+            "changed": changed,
+            "failed_campaign_id": current_campaign_id,
+            "error": str(exc),
+            "error_type": type(exc).__name__,
+        }
+        _write_audit(
+            "bulk_update_campaign_status",
+            {
+                "campaign_ids": campaign_ids,
+                "status": status,
+                "dry_run": dry_run,
+                "confirmed": confirm,
+            },
+            failure,
+        )
+        raise
     result = {
         "success": True,
         "dry_run": dry_run,
