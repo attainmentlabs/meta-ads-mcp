@@ -181,7 +181,7 @@ Prefer writing campaigns as config files? Use [meta-ads-cli](https://github.com/
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.10+
 - `uv` for the uvx install path
 - A Meta Business Manager account with an ad account and Facebook Page
 
